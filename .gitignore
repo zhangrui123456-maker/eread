@@ -1,0 +1,36 @@
+# dependencies
+web/node_modules/
+
+# secrets — NEVER commit (BYOK keys, FR-M2 / NFR-SEC1)
+**/.env.local
+**/.env
+
+# spike / debug artifacts
+.tmp-*
+*.tmp
+
+# android build outputs (local.properties is gitignored — it has the SDK path)
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+
+# IDE
+.idea/
+
+# 一次性脚本
+get-packages.mjs
+
+# 用户提供的电子书 + 提取的封面（版权/体积，不进 git）
+web/test-epub/
+web/covers/
+tex/
+resources/
+
+# 离线打包的 assets 副本（构建产物，从 web/ 重新生成，不进 git）
+android/app/src/main/assets/
+
+# 调试产物
+.wallpaper.png
+web/probe.js
+新建*

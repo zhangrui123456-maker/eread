@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Eread — T1.2 ruby annotation demo</title>
+<link rel="stylesheet" href="./annotations.css"/>
+<style>
+  body { font: 17px/1.9 Georgia, "Times New Roman", serif; max-width: 34em; margin: 1.5em auto; padding: 0 1em; color: #222; }
+  .controls { position: sticky; top: 0; background: #fff; border-bottom: 1px solid #ddd; padding: .5em 0; margin-bottom: 1em; display: flex; gap: .4em; align-items: center; font: 14px system-ui, sans-serif; flex-wrap: wrap; }
+  .controls .label { margin-right: auto; color: #666; }
+  .controls button { cursor: pointer; padding: .25em .7em; border: 1px solid #ddd; background: #fff; border-radius: 4px; }
+  .controls button.active { background: #111; color: #fff; border-color: #111; }
+  .legend { font: 12px system-ui, sans-serif; color: #666; margin: .5em 0 1.5em; }
+  h1 { font: 600 16px system-ui, sans-serif; margin: 0 0 1em; color: #444; }
+</style>
+</head>
+<body data-active="pos">
+
+<h1>T1.2 · &lt;ruby&gt; 虚线标注渲染 demo</h1>
+
+<div class="controls">
+  <span class="label">分类方式（切换重着色，FR-A3）：</span>
+  <button data-set="pos" class="active">① 词性</button>
+  <button data-set="clicked">② 是否点击</button>
+  <button data-set="gaokao">③ 高考四六级</button>
+  <button data-set="freq">④ 词频</button>
+</div>
+<p class="legend">虚线 = 已切分待查；实线 = 已查过。颜色随当前分类方式变化。
+  切到「②是否点击」可看到 <em>turns back</em>（已查）实线、其余虚线。</p>
+
+<p>Reading a book in a foreign language is a slow but rewarding
+<ruby class="ann" data-pos="noun" data-clicked="no" data-level="cet4" data-freq="high">habit<rt>习惯</rt></ruby>.
+The reader
+<ruby class="ann" data-pos="phrase" data-clicked="no" data-level="cet6" data-freq="mid">stumbles over<rt>磕绊</rt></ruby>
+unfamiliar words, loses the thread of the sentence, and
+<ruby class="ann" data-pos="phrase" data-clicked="yes" data-level="cet4" data-freq="mid">turns back<rt>返回</rt></ruby>
+to
+<ruby class="ann" data-pos="phrase" data-clicked="no" data-level="gk" data-freq="low">look up<rt>查阅</rt></ruby>
+a phrase that
+<ruby class="ann" data-pos="phrase" data-clicked="no" data-level="cet6" data-freq="mid">slipped past<rt>溜走</rt></ruby>
+a moment ago.</p>
+
+<p>A good
+<ruby class="ann" data-pos="noun" data-clicked="no" data-level="cet4" data-freq="high">dictionary<rt>词典</rt></ruby>
+helps, of course, but reaching for it breaks the
+<ruby class="ann" data-pos="noun" data-clicked="no" data-level="cet6" data-freq="mid">rhythm<rt>节奏</rt></ruby>
+of the page.</p>
+
+<script>
+  // FR-A3: switching the active classification recolors all spans via the
+  // [data-active] CSS attribute (see annotations.css) — no per-span recompute.
+  const controls = document.querySelector('.controls')
+  controls.addEventListener('click', e => {
+    const b = e.target.closest('button[data-set]')
+    if (!b) return
+    document.body.dataset.active = b.dataset.set
+    controls.querySelectorAll('button').forEach(x =>
+      x.classList.toggle('active', x === b))
+  })
+</script>
+</body>
+</html>

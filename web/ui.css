@@ -1,0 +1,112 @@
+/* Eread 设计系统 — 毛玻璃 + 渐变 + 动画
+   风格参考: deepseek.com / work.wenzflow.com (现代 SaaS, glassmorphism, 蓝紫渐变) */
+
+:root {
+    --accent-1: #2563eb;
+    --accent-2: #7c3aed;
+    --accent-grad: linear-gradient(135deg, #2563eb, #7c3aed);
+    --glass-bg: rgba(255, 255, 255, 0.72);
+    --glass-border: rgba(255, 255, 255, 0.4);
+    --glass-blur: 20px;
+    --radius: 12px;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.06);
+    --shadow-md: 0 4px 16px rgba(0,0,0,.10);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,.14);
+    --ease: cubic-bezier(.4, 0, .2, 1);
+}
+
+/* 毛玻璃通用类 */
+.glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+    border: 1px solid var(--glass-border);
+}
+
+/* 页面内容淡入 */
+@keyframes eread-fade-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.fade-in { animation: eread-fade-in .32s var(--ease); }
+
+/* 渐变按钮 */
+.btn-primary {
+    background: var(--accent-grad);
+    color: #fff !important;
+    border: none !important;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, .32);
+}
+
+/* 所有按钮点击动画 */
+button {
+    transition: transform .16s var(--ease), opacity .16s var(--ease), background .2s var(--ease), color .2s var(--ease);
+    -webkit-tap-highlight-color: transparent;
+}
+button:active {
+    transform: scale(.94);
+    opacity: .85;
+}
+
+/* 卡片 hover/点击 */
+.book-card {
+    transition: transform .22s var(--ease), box-shadow .22s var(--ease);
+}
+.book-card:active { transform: scale(.96); }
+
+/* 毛玻璃弹窗/菜单（阅读页 #menu 等） */
+.glass-panel {
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(28px) saturate(170%);
+    -webkit-backdrop-filter: blur(28px) saturate(170%);
+    border-top: 1px solid rgba(255,255,255,.5);
+    box-shadow: 0 -8px 32px rgba(0,0,0,.12);
+}
+
+/* 顶部/底部栏毛玻璃 + 渐变描边 */
+.glass-bar {
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+    border: none;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+/* 色块选择（带过渡 + 选中动画） */
+.swatch { transition: transform .16s var(--ease), outline .16s var(--ease); }
+.swatch:active { transform: scale(.88); }
+
+/* 查词弹窗（放主文档，固定左下角，避免 iframe 分页坐标越界） */
+.eread-popup {
+    position: fixed;
+    left: 16px;
+    bottom: 12vh;
+    z-index: 50;
+    min-width: 140px;
+    max-width: 60vw;
+    background: rgba(255,255,255,.95);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(0,0,0,.08);
+    border-radius: 12px;
+    box-shadow: 0 8px 28px rgba(0,0,0,.16);
+    padding: .6em .8em;
+    font-family: system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+    animation: eread-popup-in .2s var(--ease);
+}
+@keyframes eread-popup-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.eread-popup .ep-word { font-weight: 600; font-size: 15px; color: #111; }
+.eread-popup .ep-pos { font-size: 12px; color: #888; margin-top: .15em; }
+.eread-popup .ep-trans { font-size: 13px; color: #333; margin-top: .3em; }
+.eread-popup .ep-search { font-size: 12px; color: #2563eb; margin-top: .4em; padding-top: .4em; border-top: 1px solid #f0f0f0; cursor: pointer; }
+
+/* ---- 全局主题（CSS 变量由 applyThemeVars 设置，所有页面统一）---- */
+body { background: var(--app-bg, #fafafa); color: var(--app-fg, #222); }
+button {
+    background: var(--app-btn-bg, #fff);
+    color: var(--app-btn-fg, #333);
+    border-color: var(--app-btn-border, #ddd);
+}
+.topbar, .bottombar { background: var(--app-bar, #fff); }
+.menu-list, section { background: var(--app-card, #fff); }
+.topbar h1, label, .menu-item span { color: var(--app-fg, #222); }

@@ -1,0 +1,101 @@
+/* Eread annotation rendering — the product's core differentiator.
+   Upstream: docs/prd/产品需求文档PRD.md FR-A2 (词下小号字释义) / FR-A3 (四类颜色分类映射).
+   docs/software/技术方案.md §4 (DOM 叠加 <ruby> 注解 + CSS 虚线边框).
+
+   A word/phrase is wrapped in <ruby class="ann"> with an <rt> carrying the
+   Chinese gloss. ruby-position:under puts the gloss *below* the word; a dashed
+   border under the ruby marks the segmented span. The color encodes the active
+   classification (POS / clicked / gaokao / frequency) and is switched by setting
+   [data-active] on a container, so changing classification recolors every span
+   with no per-span re-mapping. */
+
+/* 标注：<span class="ann"> 内上下两行（.rb 单词 + .gloss 释义）。
+   用 inline-block 而非 <ruby>，因 Android WebView 里 ruby-position:under 渲染
+   不可控、译文与虚线相交。 */
+ruby.ann {
+    ruby-position: under;
+    ruby-align: center;   /* 译文居中，不占满宽度 */
+    border-bottom: 1px dashed currentColor;
+}
+ruby.ann > rt {
+    font-size: calc(var(--rt-scale, 0.62) * 1em);
+    line-height: 1.3;
+    white-space: nowrap;  /* 译文不换行、宽度=内容，不拉大文字间距 */
+    color: var(--rt-color, #6b7280);
+    font-family: system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* Click-to-annotate trigger placed before each paragraph (FR-A1 on-demand). */
+.eread-trigger {
+    display: inline-block;
+    cursor: pointer;
+    user-select: none;
+    color: #2563eb;
+    font: 600 11px/1.4 system-ui, sans-serif;
+    padding: 0 4px;
+    margin: 0 3px 0 0;
+    border: 1px solid #2563eb;
+    border-radius: 3px;
+    background: #fff;
+}
+.eread-trigger.done {
+    color: #9ca3af;
+    border-color: #e5e7eb;
+    cursor: default;
+}
+
+/* Clicked spans go solid (already looked up); un-clicked stay dashed. */
+ruby.ann[data-clicked="yes"] {
+    border-bottom-style: solid;
+    border-bottom-color: currentColor;
+}
+
+/* ---- per-category color maps (FR-A3: four classifications) ----
+   Only the rule matching [data-active] applies color; spans with no value
+   for the active category fall back to the inherited (neutral) text color. */
+
+/* ① 词性 (POS) */
+[data-active="pos"] ruby.ann[data-pos="noun"]   { color: #2563eb; }
+[data-active="pos"] ruby.ann[data-pos="verb"]   { color: #dc2626; }
+[data-active="pos"] ruby.ann[data-pos="adj"]    { color: #059669; }
+[data-active="pos"] ruby.ann[data-pos="adv"]    { color: #7c3aed; }
+[data-active="pos"] ruby.ann[data-pos="phrase"] { color: #d97706; }
+
+/* ② 是否点击查看 (clicked) */
+[data-active="clicked"] ruby.ann[data-clicked="no"]  { color: #2563eb; }
+[data-active="clicked"] ruby.ann[data-clicked="yes"] { color: #9ca3af; }
+
+/* ③ 高考四六级 (gaokao / CET) */
+[data-active="gaokao"] ruby.ann[data-level="cet4"] { color: #059669; }
+[data-active="gaokao"] ruby.ann[data-level="cet6"] { color: #7c3aed; }
+[data-active="gaokao"] ruby.ann[data-level="gk"]   { color: #dc2626; }
+
+/* ④ 词频 (frequency) */
+[data-active="freq"] ruby.ann[data-freq="high"] { color: #9ca3af; }
+[data-active="freq"] ruby.ann[data-freq="mid"]  { color: #2563eb; }
+[data-active="freq"] ruby.ann[data-freq="low"]  { color: #dc2626; }
+
+/* ---- tap-to-lookup popup (T2.4, FR-D1/D2) ---- */
+.eread-popup {
+    position: fixed;
+    z-index: 100;
+    min-width: 120px;
+    max-width: 240px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.15);
+    padding: .5em .7em;
+    font-family: system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+.eread-popup .ep-word { font-weight: 600; font-size: 15px; color: #111; }
+.eread-popup .ep-pos { font-size: 12px; color: #888; margin-top: .15em; }
+.eread-popup .ep-trans { font-size: 13px; color: #333; margin-top: .3em; }
+.eread-popup .ep-search {
+    font-size: 12px;
+    color: #2563eb;
+    margin-top: .4em;
+    padding-top: .4em;
+    border-top: 1px solid #f0f0f0;
+    cursor: pointer;
+}

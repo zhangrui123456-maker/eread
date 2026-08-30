@@ -1,0 +1,16 @@
+{
+  "name": "eread-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Eread Web layer (M1 spike): foliate-js EPUB rendering + ruby/CSS dashed annotation engine + BYOK model bridge. Upstream: docs/software/技术方案.md, docs/prd/产品需求文档PRD.md, docs/dev/AI执行指导.md.",
+  "scripts": {
+    "dev": "serve . -l 5173 --cors",
+    "start": "serve . -l 5173 --cors"
+  },
+  "dependencies": {
+    "foliate-js": "^1.0.1",
+    "jszip": "^3.10.1",
+    "serve": "^14.2.6"
+  }
+}

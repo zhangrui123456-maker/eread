@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>Eread · 用户</title>
+<link rel="stylesheet" href="./ui.css"/>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font: 14px/1.5 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; color: var(--app-fg, #222); }
+  .app { display: flex; flex-direction: column; height: 100vh; background: var(--app-bg, #fafafa); }
+
+  .topbar { height: 10vh; min-height: 48px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .topbar h1 { font-size: 17px; font-weight: 600; margin: 0; }
+
+  .content { flex: 1; position: relative; overflow-y: auto; }
+
+  .bottombar { height: 10vh; min-height: 48px; display: flex; flex-shrink: 0; }
+  .bottombar .tab { flex: 1; border: none; background: none; cursor: pointer; font-size: 15px; color: #999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+  .bottombar .tab.active { color: #2563eb; font-weight: 600; }
+  .bottombar .tab .tab-icon { width: 22px; height: 22px; opacity: 0.45; transition: opacity .2s ease, filter .2s ease; }
+  .bottombar .tab.active .tab-icon { opacity: 1; filter: brightness(0) saturate(100%) invert(33%) sepia(70%) saturate(2500%) hue-rotate(210deg) brightness(95%) contrast(92%); }
+  .bottombar .tab span { font-size: 11px; line-height: 1; }
+
+  /* 栏项列表 */
+  .menu-list { margin-top: .6em; background: #fff; border-top: 1px solid #eee; border-bottom: 1px solid #eee; }
+  .menu-item { display: flex; align-items: center; justify-content: space-between; padding: .9em 1em; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
+  .menu-item:last-child { border-bottom: none; }
+  .menu-item .arrow { color: #ccc; font-size: 18px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar glass-bar"><h1>用户</h1></div>
+  <div class="content fade-in">
+    <div class="menu-list">
+      <div class="menu-item" id="settings-item">
+        <span>设置</span>
+        <span class="arrow">›</span>
+      </div>
+    </div>
+  </div>
+  <div class="bottombar glass-bar">
+    <button class="tab" data-page="shelf">
+      <img class="tab-icon" src="ico/home-dark.png" alt="书架"/>
+      <span>书架</span>
+    </button>
+    <button class="tab active" data-page="user">
+      <img class="tab-icon" src="ico/user-dark.png" alt="用户"/>
+      <span>用户</span>
+    </button>
+  </div>
+</div>
+<script type="module" src="./user/user.js"></script>
+</body>
+</html>
