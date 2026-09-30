@@ -2,6 +2,7 @@
 // reader ☰ menu via localStorage (内外关联). Upstream: docs/prd FR-R2, FR-D3.
 
 import { loadSettings, updateSettings, THEMES, applyThemeVars } from './settings.js'
+import { fillSwatches, bindRange } from './ui.js'
 import { bridgeCall, _installShellCallbacks } from './bridge/messages.js'
 import { putWallpaper } from './db.js'
 
@@ -48,44 +49,21 @@ document.getElementById('back-btn').addEventListener('click', () => {
 })
 
 // ---- swatches ----
-function fillSwatches(el, colors, current, key) {
-    el.innerHTML = ''
-    for (const c of colors) {
-        const d = document.createElement('div')
-        d.className = 'swatch' + (c === current ? ' active' : '')
-        d.style.background = c
-        d.dataset.color = c
-        d.addEventListener('click', () => {
-            const patch = { [key]: c }
-            if (key === 'bg') patch.wallpaper = '' // 选纯色背景则清除壁纸（同层次二选一）
-            s = updateSettings(patch)
-            el.querySelectorAll('.swatch').forEach(x =>
-                x.classList.toggle('active', x.dataset.color === c))
-        })
-        el.appendChild(d)
-    }
+const pickSwatch = (key) => (c) => {
+    const patch = { [key]: c }
+    if (key === 'bg') patch.wallpaper = '' // 选纯色背景则清除壁纸（同层次二选一）
+    s = updateSettings(patch)
 }
 fillSwatches(document.getElementById('bg-swatches'),
-    ['#ffffff', '#f5f0e6', '#2b2b2b', '#1a1a1a'], s.bg, 'bg')
+    ['#ffffff', '#f5f0e6', '#2b2b2b', '#1a1a1a'], s.bg, pickSwatch('bg'))
 fillSwatches(document.getElementById('fg-swatches'),
-    ['#222222', '#333333', '#e0e0e0', '#d0d0d0'], s.fg, 'fg')
+    ['#222222', '#333333', '#e0e0e0', '#d0d0d0'], s.fg, pickSwatch('fg'))
 fillSwatches(document.getElementById('rt-swatches'),
-    ['#6b7280', '#2563eb', '#9ca3af', '#dc2626'], s.rtColor, 'rtColor')
+    ['#787774', '#1f6c9f', '#346538', '#956400'], s.rtColor, pickSwatch('rtColor'))
 
 // ---- ranges ----
-function bindRange(inputId, outId, key, fmt) {
-    const input = document.getElementById(inputId)
-    const out = document.getElementById(outId)
-    input.value = s[key]
-    out.textContent = fmt(s[key])
-    input.addEventListener('input', () => {
-        const v = +input.value
-        s = updateSettings({ [key]: v })
-        out.textContent = fmt(v)
-    })
-}
-bindRange('font-size', 'font-size-val', 'fontSize', v => v + 'px')
-bindRange('rt-scale', 'rt-scale-val', 'rtScale', v => v.toFixed(2) + '×')
+bindRange('font-size', 'font-size-val', s.fontSize, v => v + 'px', v => { s = updateSettings({ fontSize: v }) })
+bindRange('rt-scale', 'rt-scale-val', s.rtScale, v => v.toFixed(2) + '×', v => { s = updateSettings({ rtScale: v }) })
 
 // ---- flow ----
 const flowButtons = document.getElementById('flow-buttons')
@@ -97,7 +75,46 @@ flowButtons.addEventListener('click', e => {
     s = updateSettings({ flow: b.dataset.flow })
     flowButtons.querySelectorAll('button').forEach(x =>
         x.classList.toggle('active', x === b))
+    updateScrollUI()
 })
+
+// ---- 滑动方式（纵向连贯）----
+const scrollModeButtons = document.getElementById('scroll-mode-buttons')
+scrollModeButtons.querySelectorAll('button').forEach(b =>
+    b.classList.toggle('active', b.dataset.mode === s.scrollMode))
+scrollModeButtons.addEventListener('click', e => {
+    const b = e.target.closest('button[data-mode]')
+    if (!b) return
+    s = updateSettings({ scrollMode: b.dataset.mode })
+    scrollModeButtons.querySelectorAll('button').forEach(x =>
+        x.classList.toggle('active', x === b))
+    updateScrollUI()
+})
+
+// ---- 滑动系数（差速）----
+bindRange('scroll-factor', 'scroll-factor-val', s.scrollFactor, v => v.toFixed(2) + '×', v => { s = updateSettings({ scrollFactor: v }) })
+
+// ---- 滑动方向（差速）----
+const scrollDirectionButtons = document.getElementById('scroll-direction-buttons')
+scrollDirectionButtons.querySelectorAll('button').forEach(b =>
+    b.classList.toggle('active', b.dataset.dir === s.scrollDirection))
+scrollDirectionButtons.addEventListener('click', e => {
+    const b = e.target.closest('button[data-dir]')
+    if (!b) return
+    s = updateSettings({ scrollDirection: b.dataset.dir })
+    scrollDirectionButtons.querySelectorAll('button').forEach(x =>
+        x.classList.toggle('active', x === b))
+})
+
+// 条件显示：纵向连贯才显示「滑动方式」；差速滑动才显示「滑动系数」「滑动方向」
+function updateScrollUI() {
+    const scrolled = s.flow === 'scrolled'
+    const variable = s.scrollMode === 'variable'
+    document.getElementById('scroll-mode-section').hidden = !scrolled
+    document.getElementById('scroll-factor-section').hidden = !(scrolled && variable)
+    document.getElementById('scroll-direction-section').hidden = !(scrolled && variable)
+}
+updateScrollUI()
 
 // ---- search site (FR-D3) ----
 const siteSel = document.getElementById('search-site')
@@ -147,7 +164,7 @@ document.getElementById('wallpaper-clear').addEventListener('click', () => {
 
 // ---- 页面背景（书架/用户页，需求3/5）----
 fillSwatches(document.getElementById('shelf-bg-swatches'),
-    ['#f5f5f5', '#ffffff', '#1a1a1a', '#2b2b2b'], s.shelfBg, 'shelfBg')
+    ['#f5f5f5', '#ffffff', '#1a1a1a', '#2b2b2b'], s.shelfBg, pickSwatch('shelfBg'))
 document.getElementById('shelf-wallpaper-btn').addEventListener('click', async () => {
     if (typeof window.ereadBridge === 'undefined') { alert('需在 App 内使用'); return }
     const res = await bridgeCall('openImagePicker', {})
@@ -159,8 +176,8 @@ document.getElementById('shelf-wallpaper-clear').addEventListener('click', () =>
     s = updateSettings({ shelfWallpaper: '' })
 })
 
-bindRange('wallpaper-blur', 'wallpaper-blur-val', 'wallpaperBlur', v => v + 'px')
-bindRange('wallpaper-opacity', 'wallpaper-opacity-val', 'wallpaperOpacity', v => Math.round(v * 100) + '%')
+bindRange('wallpaper-blur', 'wallpaper-blur-val', s.wallpaperBlur, v => v + 'px', v => { s = updateSettings({ wallpaperBlur: v }) })
+bindRange('wallpaper-opacity', 'wallpaper-opacity-val', s.wallpaperOpacity, v => Math.round(v * 100) + '%', v => { s = updateSettings({ wallpaperOpacity: v }) })
 
 // ---- 查词弹窗位置 ----
 const popupPosButtons = document.getElementById('popup-position-buttons')
@@ -173,3 +190,59 @@ popupPosButtons.addEventListener('click', e => {
     popupPosButtons.querySelectorAll('button').forEach(x =>
         x.classList.toggle('active', x === b))
 })
+
+// ---- 查词方式（本地优先 / 联网优先，FR-A4）----
+const lookupModeButtons = document.getElementById('lookup-mode-buttons')
+lookupModeButtons.querySelectorAll('button').forEach(b =>
+    b.classList.toggle('active', b.dataset.mode === s.lookupMode))
+lookupModeButtons.addEventListener('click', e => {
+    const b = e.target.closest('button[data-mode]')
+    if (!b) return
+    s = updateSettings({ lookupMode: b.dataset.mode })
+    lookupModeButtons.querySelectorAll('button').forEach(x =>
+        x.classList.toggle('active', x === b))
+})
+
+// ---- 翻译练习偏好 ----
+const diffButtons = document.getElementById('practice-difficulty-buttons')
+diffButtons.querySelectorAll('button').forEach(b =>
+    b.classList.toggle('active', b.dataset.d === s.practiceDifficulty))
+diffButtons.addEventListener('click', e => {
+    const b = e.target.closest('button[data-d]')
+    if (!b) return
+    s = updateSettings({ practiceDifficulty: b.dataset.d })
+    diffButtons.querySelectorAll('button').forEach(x =>
+        x.classList.toggle('active', x === b))
+})
+
+// 句长（英文词数 / 中文字数）
+const enLen = document.getElementById('practice-en-len')
+const cnLen = document.getElementById('practice-cn-len')
+enLen.value = s.practiceEnLen
+cnLen.value = s.practiceCnLen
+enLen.addEventListener('change', () => { s = updateSettings({ practiceEnLen: +enLen.value || 20 }) })
+cnLen.addEventListener('change', () => { s = updateSettings({ practiceCnLen: +cnLen.value || 25 }) })
+
+// 题材偏好（输入 + 确认回填，方便短时间应用和修改）
+const topicInput = document.getElementById('practice-topic')
+topicInput.value = s.practiceTopic ?? ''
+document.getElementById('practice-topic-confirm').addEventListener('click', () => {
+    const v = topicInput.value.trim()
+    topicInput.value = v
+    s = updateSettings({ practiceTopic: v })
+})
+
+// 题目点词翻译开关
+const tapLookupButtons = document.getElementById('practice-tap-lookup-buttons')
+tapLookupButtons.querySelectorAll('button').forEach(b =>
+    b.classList.toggle('active', (s.practiceTapLookup ? '1' : '0') === b.dataset.v))
+tapLookupButtons.addEventListener('click', e => {
+    const b = e.target.closest('button[data-v]')
+    if (!b) return
+    s = updateSettings({ practiceTapLookup: b.dataset.v === '1' })
+    tapLookupButtons.querySelectorAll('button').forEach(x =>
+        x.classList.toggle('active', x === b))
+})
+
+// 随机参数（生成句子 temperature）
+bindRange('practice-temperature', 'practice-temperature-val', s.practiceTemperature, v => v.toFixed(1), v => { s = updateSettings({ practiceTemperature: v }) })

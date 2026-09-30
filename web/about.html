@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>Eread · 关于</title>
+<link rel="stylesheet" href="./ui.css"/>
+</head>
+<body>
+<div class="app">
+  <div class="topbar"><h1>关于</h1></div>
+  <div class="content scroll fade-in">
+    <button id="back-btn" title="返回" aria-label="返回">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <div class="settings about">
+      <section>
+        <label>个人简述</label>
+        <p>本工程旨在辅助较低英语水平的读者，更好的在阅读过程中学习英语（是的我四级没过，别笑话我TvT）</p>
+        <p class="muted">开发来自“好菓汁池”，技术交流和问题反馈可联系我邮箱 <a href="mailto:2952124295@qq.com">2952124295@qq.com</a></p>
+      </section>
+      <section>
+        <label>功能</label>
+        <ul>
+          <li>导入并阅读 EPUB / TXT 英文电子书。</li>
+          <li>点选查词：点一下单词，弹窗显示词性、音标与中文释义。</li>
+          <li>段落划线标注：点段落前「译」按钮，用虚线划出重点词并在下方标注释义。</li>
+          <li>主题与排版自定义：浅色 / 深色 / 护眼主题、字号、颜色、阅读壁纸、翻页方式。</li>
+        </ul>
+      </section>
+      <section>
+        <label>使用方法</label>
+        <ol>
+          <li>打开 App 进入「书架」，点开一本预置样书体验。</li>
+          <li>配置 API Key：进入「用户」→「设置」→「翻译 API 配置」，填入模型 Key 并保存（启用 AI 查词与段落标注）。默认使用 DeepSeek，Key 获取请跳转 <a href="https://platform.deepseek.com/api_keys">https://platform.deepseek.com/api_keys</a></li>
+          <li>点正文中的单词查词：弹窗显示词性、音标与释义；点「详情」查看完整词条（音标 / 多义项 / 例句 / 常用词组搭配），可「刷新」重新查询或「网页搜索」跳转浏览器。未联网时也能用内置离线词典查词。</li>
+          <li>点段落前「译」按钮：用虚线划出重点词并按词频上色（高频灰 / 中频蓝 / 低频红），词下标注中文释义；点已译段落里的单词「详情」，会附带该段的「段落赏析」（语法词句分析）。</li>
+          <li>查词方式可在「设置」选择：联网优先 / 本地优先（本地优先断网也能查词）。</li>
+          <li>导入自己的书：回到书架，点右下角「+」，选择 EPUB / TXT 文件。</li>
+        </ol>
+      </section>
+      <section>
+        <label>未来优化</label>
+        <ul>
+          <li>四色分类标注：按词性 / 是否查过 / 考纲 / 词频给划线标不同颜色。</li>
+          <li>标注导出、多模型切换。</li>
+          <li>更多能力：PDF、语音朗读（TTS）、背单词复习、书城、账号同步等。</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</div>
+<script type="module" src="./about.js"></script>
+</body>
+</html>

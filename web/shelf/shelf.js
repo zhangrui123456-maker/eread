@@ -1,9 +1,9 @@
 // Eread shelf (首页) — 所有书（预置 + 导入）同质化存书架，统一管理/删除。
 // Upstream: docs/prd FR-R1 (导入并阅读本地 EPUB/TXT), docs/dev T2.1.
 
-import { putBook, getImportedBooks, addImportedBook, deleteBook, getWallpaper } from '../db.js'
+import { putBook, getImportedBooks, addImportedBook, deleteBook } from '../db.js'
 import { bridgeCall, _installShellCallbacks } from '../bridge/messages.js'
-import { loadSettings, shadeColor, isDarkColor, applyThemeVars } from '../settings.js'
+import { applyPageTheme } from '../ui.js'
 
 if (typeof window.ereadBridge !== 'undefined') {
     _installShellCallbacks(window.ereadBridge)
@@ -179,55 +179,17 @@ function render() {
     shelf.appendChild(add)
 }
 
-// 底部 tab 导航（书架 | 用户）
+// 底部 tab 导航（书架 | 练习 | 用户）
 document.querySelectorAll('.bottombar .tab').forEach(tab => {
     tab.addEventListener('click', () => {
-        if (tab.dataset.page === 'user') location.href = 'user.html'
+        if (tab.dataset.page === 'practice') location.href = 'practice.html'
+        else if (tab.dataset.page === 'user') location.href = 'user.html'
     })
 })
 document.getElementById('import-btn').addEventListener('click', importBook)
 
 // 页面背景主题（书架/用户页，与阅读背景区分）+ 顶栏/底栏颜色跟随（需求5）
-async function applyPageTheme() {
-    applyThemeVars() // 全局主题变量（body/button/bar/card 跟随主题）
-    const s = loadSettings()
-    const bg = s.shelfBg || '#f5f5f5'
-    const appEl = document.querySelector('.app')
-    let wallpaperUrl = null
-    if (s.shelfWallpaper) {
-        try {
-            const blob = await getWallpaper('shelfWallpaper')
-            if (blob) wallpaperUrl = URL.createObjectURL(blob)
-        } catch { /* ignore */ }
-    }
-    const setBg = (el) => {
-        if (!el) return
-        if (wallpaperUrl) {
-            el.style.backgroundImage = `url(${wallpaperUrl})`
-            el.style.backgroundSize = 'cover'
-            el.style.backgroundPosition = 'center'
-            el.style.background = ''
-        } else {
-            el.style.backgroundImage = ''
-            el.style.background = bg
-        }
-    }
-    setBg(appEl)          // 主体背景
-    setBg(document.body)  // body 露出的部分
-    const barBg = shadeColor(bg, isDarkColor(bg) ? 0.08 : -0.06)
-    document.querySelectorAll('.topbar, .bottombar').forEach(el => { el.style.background = barBg })
-}
 applyPageTheme()
-
-// 根据主题切换底部 tab 图标（深色主题用浅色图标）
-function applyTabIcons() {
-    const suffix = loadSettings().theme === 'dark' ? 'light' : 'dark'
-    document.querySelectorAll('.tab-icon').forEach(img => {
-        const name = img.src.includes('home') ? 'home' : 'user'
-        img.src = `ico/${name}-${suffix}.png`
-    })
-}
-applyTabIcons()
 
 initShelf()
 render()

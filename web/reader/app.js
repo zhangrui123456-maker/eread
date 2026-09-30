@@ -8,6 +8,7 @@ import '../node_modules/foliate-js/view.js'
 import { _installShellCallbacks } from '../bridge/messages.js'
 import { setupAnnotations, setupWordLookup } from '../annotate/apply.js'
 import { loadSettings, updateSettings, shadeColor, isDarkColor, applyThemeVars } from '../settings.js'
+import { fillSwatches, bindRange } from '../ui.js'
 import { getBook, getMerged, putMerged, getWallpaper } from '../db.js'
 import { preprocessEpub } from '../preprocess.js'
 
@@ -160,29 +161,97 @@ function saveTheme(patch) {
 
 // ---- 阅读进度保留（FR-R3）------------------------------------------------
 const PROGRESS_KEY = 'eread-progress'
+/** 当前浏览位置的小数进度（0-1）：
+ *  scrolled = 滚动位置 / 总高度；paginated = (当前页-1) / (总页-2)。
+ *  foliate-js 的 view.lastLocation 不含 fraction（#onRelocate 丢弃了），
+ *  故直接从 renderer 的公开 getter 计算。 */
+function currentFraction() {
+    const r = view.renderer
+    if (!r) return null
+    if (r.scrolled) return r.viewSize ? Math.min(1, Math.max(0, r.start / r.viewSize)) : null
+    return r.pages > 2 ? (r.page - 1) / (r.pages - 2) : null
+}
+/** fraction (0-1) → " 45%" 带前导空格；非数字 → 空串（供状态浮层拼接，不含 cfi）。 */
+const pct = (f) => (typeof f === 'number' ? ' ' + Math.round(f * 100) + '%' : '')
 function saveProgress() {
     const cfi = view.lastLocation?.cfi
-    if (!cfi) return
+    const fraction = currentFraction()
+    if (!cfi && fraction == null) return
     try {
         const map = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}')
-        map[BOOK_URL] = cfi
+        // cfi 用于横向翻页精确定位；fraction 用于纵向连贯（合并 HTML 的 CFI 不可靠）
+        map[BOOK_URL] = { cfi, fraction }
         localStorage.setItem(PROGRESS_KEY, JSON.stringify(map))
+        console.log('[eread] saveProgress', { key: BOOK_URL, fraction, hasCfi: !!cfi })
+        showStatus('保存进度' + pct(fraction))
     } catch { /* ignore */ }
 }
 function loadProgress() {
     try {
-        return JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}')[BOOK_URL]
+        const raw = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}')[BOOK_URL]
+        if (!raw) return null
+        // 兼容旧格式（纯字符串 = 仅 CFI）
+        return typeof raw === 'string' ? { cfi: raw, fraction: null } : raw
     } catch { return null }
 }
 
+// 阅读状态提示：保存/恢复进度时的轻量浮层，短暂停留后淡出。
+// 颜色/层级与返回键一致（ui.css 用 --app-* 主题变量），此处只管文案与显隐。
+function showStatus(text) {
+    let el = document.getElementById('eread-toast')
+    if (!el) {
+        el = document.createElement('div')
+        el.id = 'eread-toast'
+        el.className = 'reader-toast'
+        document.body.appendChild(el)
+    }
+    el.textContent = text
+    el.classList.add('show')
+    clearTimeout(el._hideTimer)
+    el._hideTimer = setTimeout(() => el.classList.remove('show'), 1500)
+}
+
+// foliate-js 的 #justAnchored 标志会吞掉「打开/恢复后的首次滚动」，导致 relocate 不触发；
+// 且 Android 退出（后台/杀进程）不一定触发 pagehide/beforeunload。
+// 因此这里：
+//  1) 直接监听 renderer 的 scroll 事件（paginator 每次滚动都会在自身重派发 scroll，见 paginator.js L551），
+//     节流 250ms 立即保存 + 滚动停止后 400ms 兜底保存一次；
+//  2) 页面隐藏/后台/卸载时立即保存。
+let scrollSaveTimer
+let lastScrollSave = 0
+function scheduleScrollSave() {
+    const now = Date.now()
+    if (now - lastScrollSave >= 250) {
+        lastScrollSave = now
+        saveProgress()
+    }
+    clearTimeout(scrollSaveTimer)
+    scrollSaveTimer = setTimeout(saveProgress, 400)
+}
+function saveNow() { saveProgress() }
+window.addEventListener('pagehide', saveNow)
+window.addEventListener('beforeunload', saveNow)
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') saveNow()
+})
+
 // ---- pagination ---------------------------------------------------------
+let firstRelocate = true
 view.addEventListener('relocate', e => {
     saveProgress() // 每页/滚动都保存阅读位置
-    // 页码：横向翻页 = 当前列/总列；纵向连贯 = 滚动位置对应的页
-    const page = view.renderer?.page
-    const pages = view.renderer?.pages
-    if (page != null && pages != null && pages > 0) {
-        locationEl.textContent = `${Math.min(page + 1, pages)} / ${pages} 页`
+    // 翻页/滑动时隐藏顶栏底栏（需求4）；首次打开不隐藏
+    if (!firstRelocate) toggleBars(false)
+    firstRelocate = false
+    // 页码显示：横向翻页的 renderer.pages 含封面/封底各 1 页（正文页 = pages - 2，
+    // 且 page 是 1 起的正文页号，page=0 是封面）；纵向连贯 pages 即屏数（无封面/封底），
+    // page 是 0 起的屏序号，故用 page+1。
+    const r = view.renderer
+    const page = r?.page, pages = r?.pages
+    const scrolled = !!r?.scrolled
+    if (page != null && pages != null && pages > 0 && (scrolled || pages > 2)) {
+        const total = scrolled ? pages : pages - 2
+        const current = scrolled ? Math.min(page + 1, pages) : Math.min(Math.max(page, 1), total)
+        locationEl.textContent = `${current} / ${total} 页`
     } else {
         const { fraction } = e.detail ?? {}
         locationEl.textContent = `${Math.round((fraction ?? 0) * 100)}%`
@@ -193,8 +262,12 @@ view.addEventListener('load', e => {
     const doc = e.detail?.doc
     if (doc) {
         setupAnnotations(doc, { onStatus: s => console.log('[eread]', s), bookId: BOOK_URL })
-        setupWordLookup(doc, { onStatus: s => console.log('[eread]', s) })
+        setupWordLookup(doc, { onStatus: s => console.log('[eread]', s), bookId: BOOK_URL })
     }
+    // book 内容在 foliate-js 的 iframe 里，touch 事件不冒泡到父文档；记录当前
+    // document，「差速滑动」的 touch 接管需直接挂到 doc 上（而非 renderer host）。
+    activeDoc = doc ?? null
+    applyScrollMode()
 })
 
 // ---- toolbar ------------------------------------------------------------
@@ -228,51 +301,35 @@ document.getElementById('menu-btn').addEventListener('click', () => {
 document.getElementById('menu-close').addEventListener('click', closeMenu)
 menuMask.addEventListener('click', closeMenu)
 
-function fillSwatches(el, colors, current, onPick) {
-    el.innerHTML = ''
-    for (const c of colors) {
-        const d = document.createElement('div')
-        d.className = 'swatch' + (c === current ? ' active' : '')
-        d.style.background = c
-        d.dataset.color = c
-        d.addEventListener('click', () => {
-            onPick(c)
-            el.querySelectorAll('.swatch').forEach(x =>
-                x.classList.toggle('active', x.dataset.color === c))
-        })
-        el.appendChild(d)
-    }
-}
 fillSwatches(document.getElementById('bg-swatches'),
     ['#ffffff', '#f5f0e6', '#2b2b2b', '#1a1a1a'], theme.bg, c => saveTheme({ bg: c }))
 fillSwatches(document.getElementById('fg-swatches'),
     ['#222222', '#333333', '#e0e0e0', '#d0d0d0'], theme.fg, c => saveTheme({ fg: c }))
 fillSwatches(document.getElementById('rt-swatches'),
-    ['#6b7280', '#2563eb', '#9ca3af', '#dc2626'], theme.rtColor, c => saveTheme({ rtColor: c }))
+    ['#787774', '#1f6c9f', '#346538', '#956400'], theme.rtColor, c => saveTheme({ rtColor: c }))
 
-function bindRange(inputId, outId, key, fmt) {
-    const input = document.getElementById(inputId)
-    const out = document.getElementById(outId)
-    input.value = theme[key]
-    out.textContent = fmt(theme[key])
-    input.addEventListener('input', () => {
-        const v = +input.value
-        out.textContent = fmt(v)
-        saveTheme({ [key]: v })
-    })
-}
-bindRange('font-size', 'font-size-val', 'fontSize', v => v + 'px')
-bindRange('rt-scale', 'rt-scale-val', 'rtScale', v => v.toFixed(2) + '×')
+bindRange('font-size', 'font-size-val', theme.fontSize, v => v + 'px', v => saveTheme({ fontSize: v }))
+bindRange('rt-scale', 'rt-scale-val', theme.rtScale, v => v.toFixed(2) + '×', v => saveTheme({ rtScale: v }))
+bindRange('scroll-factor', 'scroll-factor-val', theme.scrollFactor, v => v.toFixed(2) + '×', v => {
+    saveTheme({ scrollFactor: v })
+    applyScrollMode()
+})
 
 // 浏览模式：横向翻页 paginated；纵向连贯 scrolled（正文占满宽）。
 async function setFlow(flow) {
-    // 保存进度（fraction；原 EPUB 与合并 HTML 的 CFI 不通用，用进度估算恢复）
-    const prevFraction = view.lastLocation?.fraction
+    // 记录切换前的小数进度（fraction；原 EPUB 与合并 HTML 的 CFI 不通用，用进度估算恢复）
+    const prevFraction = currentFraction()
     try {
-        await openBook(flow) // 重新 open（横翻=原 EPUB，纵连=合并 HTML）
+        await openBook(flow, false) // 重新 open（横翻=原 EPUB，纵连=合并 HTML）；不按 CFI 恢复，改走下方 fraction
     } catch (e) { console.warn('[eread] flow switch failed', e); return }
     if (prevFraction != null) {
-        setTimeout(() => view.goToFraction?.(prevFraction).catch?.(() => {}), 80)
+        const r = view.renderer
+        if (flow === 'scrolled') {
+            // 合并 HTML 无 sectionProgress，goToFraction 不可用 → 直接滚动到 fraction
+            setTimeout(() => r?.goTo?.({ index: 0, anchor: prevFraction }).catch?.(() => {}), 80)
+        } else {
+            setTimeout(() => view.goToFraction?.(prevFraction).catch?.(() => {}), 80)
+        }
     }
     // 淡入过渡，避免切换生硬
     const content = document.querySelector('.content')
@@ -288,36 +345,176 @@ flowButtons.addEventListener('click', e => {
     flowButtons.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b))
     setFlow(b.dataset.flow)
     saveTheme({ flow: b.dataset.flow })
+    updateScrollUI()
 })
+
+// ---- 滑动方式 / 滑动系数（纵向连贯）--------------------------------------
+// 纵向连贯模式默认原生 overflow 滚动（1:1 跟手）。「差速滑动」时接管 touch：
+// 手指划距 × 系数 → 手动设置 #container.scrollTop，实现「划满屏只滚系数×屏高」。
+// 两个关键点：
+//  1) book 内容在 foliate-js 的 iframe 里，touch 事件不冒泡到父文档，监听器
+//     必须直接挂在 book document（doc）上，而不是 renderer host。
+//  2) 必须先设 touch-action 禁原生滚动，否则浏览器在合成器线程抢先滚、
+//     preventDefault 无效。touch-action 沿命中链跨 iframe 生效，需同时设在
+//     #view、renderer 与 doc 根元素三处。用 none（而非 pan-x）：纵向连贯无横向
+//     滚动需求，none 让浏览器完全不介入任何 pan，避免「合成器准备滚动 ↔ 被
+//     preventDefault 取消」的往返造成的卡顿。
+let activeDoc = null
+let scrollDragState = null // { doc, renderer, onStart, onMove, onEnd }
+function applyScrollMode() {
+    // 清理旧接管
+    if (scrollDragState) {
+        const s = scrollDragState
+        s.doc.removeEventListener('touchstart', s.onStart)
+        s.doc.removeEventListener('touchmove', s.onMove)
+        s.doc.removeEventListener('touchend', s.onEnd)
+        s.doc.removeEventListener('touchcancel', s.onEnd)
+        scrollDragState = null
+    }
+    // 复位 touch-action
+    view.style.touchAction = ''
+    if (view.renderer) view.renderer.style.touchAction = ''
+    if (activeDoc) activeDoc.documentElement.style.touchAction = ''
+
+    const renderer = view.renderer
+    const doc = activeDoc
+    const enabled = theme.flow === 'scrolled' && theme.scrollMode === 'variable' && renderer && doc
+    if (!enabled) return
+
+    const factor = theme.scrollFactor
+    view.style.touchAction = 'none'
+    renderer.style.touchAction = 'none'
+    doc.documentElement.style.touchAction = 'none'
+
+    let touch = null
+    const onStart = e => {
+        if (e.touches.length !== 1) { touch = null; return }
+        const t = e.touches[0]
+        touch = { sx: t.clientX, sy: t.clientY, pos: renderer.containerPosition, vertical: null, dy: 0, raf: 0 }
+    }
+    const onMove = e => {
+        if (!touch || e.touches.length !== 1) { touch = null; return }
+        const t = e.touches[0]
+        const dx = t.clientX - touch.sx, dy = t.clientY - touch.sy
+        if (touch.vertical == null) {
+            if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return // 尚未判定方向
+            touch.vertical = Math.abs(dy) >= Math.abs(dx)
+        }
+        if (!touch.vertical) return // 横向手势交还原生滚动
+        e.preventDefault()
+        // 记录最新位移，用 rAF 合并到下一渲染帧再写 scrollTop：touchmove 频率
+        // 可高于 60Hz，直接写会高频触发主线程滚动 + scroll 事件（「卡」主因）。
+        touch.dy = dy
+        if (!touch.raf) {
+            const cur = touch
+            cur.raf = requestAnimationFrame(() => {
+                cur.raf = 0
+                if (cur.vertical && touch === cur) {
+                    // 方向：reverse（默认，手下滑→看下文）scrollTop 增；natural（手下滑→看上文）减
+                    const dir = theme.scrollDirection === 'natural' ? -1 : 1
+                    renderer.containerPosition = cur.pos + cur.dy * factor * dir
+                }
+            })
+        }
+    }
+    const onEnd = () => { touch = null }
+    doc.addEventListener('touchstart', onStart, { passive: true })
+    doc.addEventListener('touchmove', onMove, { passive: false })
+    doc.addEventListener('touchend', onEnd)
+    doc.addEventListener('touchcancel', onEnd)
+    scrollDragState = { doc, renderer, onStart, onMove, onEnd }
+}
+
+// 滑动方式（原生滑动 / 差速滑动）
+const scrollModeButtons = document.getElementById('scroll-mode-buttons')
+scrollModeButtons.querySelectorAll('button').forEach(b =>
+    b.classList.toggle('active', b.dataset.mode === theme.scrollMode))
+scrollModeButtons.addEventListener('click', e => {
+    const b = e.target.closest('button[data-mode]')
+    if (!b) return
+    scrollModeButtons.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b))
+    saveTheme({ scrollMode: b.dataset.mode })
+    applyScrollMode()
+    updateScrollUI()
+})
+
+// 滑动方向（差速：手下滑时看上文/下文）
+const scrollDirectionButtons = document.getElementById('scroll-direction-buttons')
+scrollDirectionButtons.querySelectorAll('button').forEach(b =>
+    b.classList.toggle('active', b.dataset.dir === theme.scrollDirection))
+scrollDirectionButtons.addEventListener('click', e => {
+    const b = e.target.closest('button[data-dir]')
+    if (!b) return
+    scrollDirectionButtons.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b))
+    saveTheme({ scrollDirection: b.dataset.dir })
+    applyScrollMode()
+})
+
+// 条件显示：纵向连贯才显示「滑动方式」；差速滑动才显示「滑动系数」「滑动方向」
+function updateScrollUI() {
+    const scrolled = theme.flow === 'scrolled'
+    const variable = theme.scrollMode === 'variable'
+    document.getElementById('scroll-mode-section').hidden = !scrolled
+    document.getElementById('scroll-factor-section').hidden = !(scrolled && variable)
+    document.getElementById('scroll-direction-section').hidden = !(scrolled && variable)
+}
+updateScrollUI()
 
 document.getElementById('jump-go').addEventListener('click', () => {
     const idx = parseInt(document.getElementById('jump-index').value, 10)
     if (!Number.isNaN(idx)) view.goTo?.(idx).catch?.(e => console.warn('[eread] jump', e))
 })
 
+// 分页参数（foliate-js renderer 属性）。当前固定；后续做页边距/宽度设置项时在此扩展。
+const PAGINATION = {
+    margin: '48px',
+    gap: '10%',
+    maxInlineSize: { paginated: '672px', scrolled: '2000px' },
+}
+
 // ---- open ---------------------------------------------------------------
 async function openBook(flow, restoreProgress = true) {
+    // 必须先读已保存进度：view.open / r.next() 都会触发 relocate，
+    // relocate 里会 saveProgress()，若放到后面再读，保存值会被第一页覆盖。
+    const saved = restoreProgress ? loadProgress() : null
     const book = await openForFlow(flow)
     view.close?.() // 关闭旧 renderer（foliate-js 的 open 不自动清理，重新 open 前必须 close）
     await view.open(book)
+    // 每次 open 会新建 renderer，需重新挂 scroll 保存监听（纵向连贯兜底保存）
+    view.renderer.addEventListener('scroll', scheduleScrollSave)
     console.log('[eread] book opened:', BOOK_URL, 'flow=', flow)
     if (!annotationsCss) {
         try { annotationsCss = await fetchText('./annotate/annotations.css') }
         catch (e) { console.warn('[eread] fetch annotations.css failed', e) }
     }
     const r = view.renderer
-    r.setAttribute('margin', '48px')
-    r.setAttribute('gap', '10%')
+    r.setAttribute('margin', PAGINATION.margin)
+    r.setAttribute('gap', PAGINATION.gap)
     r.setAttribute('flow', flow)
-    r.setAttribute('max-inline-size', flow === 'scrolled' ? '2000px' : '672px')
+    r.setAttribute('max-inline-size', flow === 'scrolled' ? PAGINATION.maxInlineSize.scrolled : PAGINATION.maxInlineSize.paginated)
     applyTheme()
-    r.next()
-    // 恢复阅读进度（首次打开时；切换 flow 走 setFlow 的 fraction 恢复）
-    if (restoreProgress) {
-        const cfi = loadProgress()
-        if (cfi) {
-            setTimeout(() => view.goTo(cfi).catch(() => {}), 150)
+    // 有保存位置 → 定位到保存处；否则从第一页开始渲染。
+    // 纵向连贯：合并 HTML 的 CFI 恢复不可靠，先渲染第一段，再直接设置滚动位置
+    // （renderer 的 containerPosition 是公开 setter，等于 #container.scrollTop）。
+    // 横向翻页：用 CFI 精确定位。
+    console.log('[eread] openBook restore', { flow, saved })
+    if (saved) {
+        if (flow === 'scrolled' && typeof saved.fraction === 'number') {
+            // 必须用 anchor 传 fraction：goTo 内部 #scrollToAnchor(fraction) 会设置 #anchor 并滚动。
+            // 若直接改 containerPosition，#anchor 仍是 0，之后 render()/expand() 的
+            // onExpand→#scrollToAnchor(#anchor) 会把位置重置回顶部。
+            showStatus('恢复进度' + pct(saved.fraction))
+            await view.renderer.goTo({ index: 0, anchor: saved.fraction }).catch(() => {})
+        } else if (saved.cfi) {
+            showStatus('恢复进度' + pct(saved.fraction))
+            await view.goTo(saved.cfi).catch(() => {})
+        } else {
+            showStatus('打开第一页')
+            r.next()
         }
+    } else {
+        showStatus('打开第一页')
+        r.next()
     }
 }
 

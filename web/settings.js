@@ -11,8 +11,18 @@ export const DEFAULTS = {
     fg: '#222222',        // 文字颜色
     fontSize: 17,         // 正文字号 (px)
     rtScale: 0.62,        // 注释字号 = 正文 × rtScale (<1)
-    rtColor: '#6b7280',   // 注释文字颜色
+    rtColor: '#787774',   // 注释文字颜色
     flow: 'paginated',    // 浏览模式: paginated | scrolled
+    scrollMode: 'native', // 纵向连贯滑动方式: native(原生) | variable(差速)
+    scrollFactor: 1,      // 差速滑动系数（划距 × 系数 = 滚动距离，0.5~1）
+    scrollDirection: 'reverse', // 差速滑动方向: reverse(手下滑→看下文) | natural(手下滑→看上文)
+    // 翻译练习偏好
+    practiceDifficulty: 'gaokao', // 练习难度: zhongkao|gaokao|cet4|cet6|ielts|toefl
+    practiceEnLen: 20,            // 英译中：英文词数目标
+    practiceCnLen: 25,            // 中译英：中文字数目标
+    practiceTopic: '',            // 题材偏好描述（空=无限定）
+    practiceTapLookup: true,      // 练习题目点词翻译开关
+    practiceTemperature: 1.2,     // 生成句子随机参数（temperature，越高越随机）
     searchSite: 'google', // 单词搜索跳转网站 (FR-D3)
     // 翻译 API 配置 (BYOK, FR-M1/M2) — base_url/model 存 localStorage；
     // apiKey 存 Android Keystore（不落 localStorage 明文，NFR-SEC1）
@@ -24,6 +34,7 @@ export const DEFAULTS = {
     wallpaperBlur: 0,        // 壁纸模糊度 0-20 (px)
     wallpaperOpacity: 0.35,  // 壁纸遮罩透明度 0-1
     popupPosition: 'bottom-left', // 查词弹窗位置: bottom-left | around-word
+    lookupMode: 'online-first',   // 查词方式: online-first(联网优先) | local-first(本地优先)
     shelfBg: '#f5f5f5',           // 页面（书架/用户页）背景主题，与阅读背景区分
     shelfWallpaper: '',           // 页面（书架/用户页）壁纸 dataURL（空 = 无）
 }
@@ -31,19 +42,19 @@ export const DEFAULTS = {
 /** 预设主题（一键设置全量颜色：背景/文字/栏/卡片/按钮）。 */
 export const THEMES = {
     light: {
-        label: '浅色', bg: '#ffffff', fg: '#222222',
-        pageBg: '#f5f5f5', barBg: '#ffffff', cardBg: '#ffffff',
-        btnBg: '#ffffff', btnFg: '#333333', btnBorder: '#dddddd', accent: '#2563eb',
+        label: '浅色', bg: '#ffffff', fg: '#1c1917',
+        pageBg: '#f7f6f3', barBg: '#ffffff', cardBg: '#ffffff',
+        btnBg: '#ffffff', btnFg: '#1c1917', btnBorder: '#e7e5e4', accent: '#1c1917',
     },
     dark: {
-        label: '深色', bg: '#16161a', fg: '#e4e4e7',
-        pageBg: '#1a1a1e', barBg: '#1f1f23', cardBg: '#1f1f23',
-        btnBg: '#2a2a2f', btnFg: '#e4e4e7', btnBorder: '#3a3a40', accent: '#3b82f6',
+        label: '深色', bg: '#1c1b1a', fg: '#edebe7',
+        pageBg: '#161514', barBg: '#1c1b1a', cardBg: '#201e1d',
+        btnBg: '#262423', btnFg: '#edebe7', btnBorder: '#343230', accent: '#edebe7',
     },
     sepia: {
-        label: '护眼', bg: '#f5f0e6', fg: '#4a3f35',
-        pageBg: '#ece4d4', barBg: '#f5f0e6', cardBg: '#f5f0e6',
-        btnBg: '#f5f0e6', btnFg: '#4a3f35', btnBorder: '#d8cbb5', accent: '#2563eb',
+        label: '护眼', bg: '#f5efe3', fg: '#4a3f35',
+        pageBg: '#ece4d4', barBg: '#f5efe3', cardBg: '#f5efe3',
+        btnBg: '#f5efe3', btnFg: '#4a3f35', btnBorder: '#d8cbb5', accent: '#4a3f35',
     },
 }
 

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>Eread · 练习</title>
+<link rel="stylesheet" href="./ui.css"/>
+</head>
+<body>
+<div class="app">
+  <div class="topbar actions">
+    <button id="prefs-btn" class="icon-btn" title="偏好设置" aria-label="偏好设置">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 5H3m9 14H3M14 3v4m2 10v4m5-9h-9m9 7h-5m5-14h-7m-6 5v4m0-2H3"/></svg>
+    </button>
+    <h1>练习</h1>
+    <button id="favs-btn" class="icon-btn" title="收藏" aria-label="收藏">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2 2 0 0 1 2 2v15a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5a2 2 0 0 1 2-2z"/></svg>
+    </button>
+  </div>
+
+  <div class="content scroll fade-in">
+    <div class="practice">
+      <div class="mode-buttons" id="dir-buttons">
+        <button data-dir="en2zh" class="active">英译中</button>
+        <button data-dir="zh2en">中译英</button>
+      </div>
+
+      <div class="practice-card" id="question-card">
+        <div class="pc-head">
+          <span class="pc-dir" id="dir-label">英译中</span>
+          <div class="pc-actions">
+            <button id="new-btn" class="btn">换一题</button>
+            <button id="fav-btn" class="btn">收藏</button>
+          </div>
+        </div>
+        <div class="pc-sentence" id="sentence">点击「换一题」生成练习句子</div>
+      </div>
+
+      <div class="practice-card">
+        <label for="input">你的翻译</label>
+        <textarea id="input" rows="5" placeholder="输入中文翻译，不认识的可用原英文单词占位…"></textarea>
+        <button id="eval-btn" class="btn-solid">测评</button>
+      </div>
+
+      <div class="practice-card" id="result" hidden></div>
+    </div>
+  </div>
+
+  <div class="bottombar">
+    <button class="tab" data-page="shelf" aria-label="书架">
+      <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+      <span>书架</span>
+    </button>
+    <button class="tab active" data-page="practice" aria-label="练习">
+      <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 8l6 6m-7 0l6-6l2-3M2 5h12M7 2h1m14 20l-5-10l-5 10m2-4h6"/></svg>
+      <span>练习</span>
+    </button>
+    <button class="tab" data-page="user" aria-label="用户">
+      <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
+      <span>用户</span>
+    </button>
+  </div>
+</div>
+<script type="module" src="./practice.js"></script>
+</body>
+</html>

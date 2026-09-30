@@ -9,6 +9,17 @@
    [data-active] on a container, so changing classification recolors every span
    with no per-span re-mapping. */
 
+/* 标注语义色板 —— 对齐项目「暖单色编辑风」（minimalist-ui）：低饱和 washed-out
+   pastels，语义色只用于虚线下划线（border-bottom-color），不染正文文字。
+   正文文字始终跟随阅读文字色，保证可读性。 */
+:root {
+    --ann-red:   #9f2f2d;   /* 低频 / 动词 / 重点 */
+    --ann-blue:  #1f6c9f;   /* 中频 / 名词 / 六级 */
+    --ann-green: #346538;   /* 四级 / 形容词 */
+    --ann-amber: #956400;   /* 短语 / 副词 / 高考 */
+    --ann-gray:  #a8a29e;   /* 高频 / 已点击 / 常见 */
+}
+
 /* 标注：<span class="ann"> 内上下两行（.rb 单词 + .gloss 释义）。
    用 inline-block 而非 <ruby>，因 Android WebView 里 ruby-position:under 渲染
    不可控、译文与虚线相交。 */
@@ -21,7 +32,7 @@ ruby.ann > rt {
     font-size: calc(var(--rt-scale, 0.62) * 1em);
     line-height: 1.3;
     white-space: nowrap;  /* 译文不换行、宽度=内容，不拉大文字间距 */
-    color: var(--rt-color, #6b7280);
+    color: var(--rt-color, #787774);
     font-family: system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
@@ -30,17 +41,17 @@ ruby.ann > rt {
     display: inline-block;
     cursor: pointer;
     user-select: none;
-    color: #2563eb;
+    color: var(--ann-blue);
     font: 600 11px/1.4 system-ui, sans-serif;
     padding: 0 4px;
     margin: 0 3px 0 0;
-    border: 1px solid #2563eb;
+    border: 1px solid var(--ann-blue);
     border-radius: 3px;
     background: #fff;
 }
 .eread-trigger.done {
-    color: #9ca3af;
-    border-color: #e5e7eb;
+    color: var(--ann-gray);
+    border-color: #d6d3d1;
     cursor: default;
 }
 
@@ -52,50 +63,28 @@ ruby.ann[data-clicked="yes"] {
 
 /* ---- per-category color maps (FR-A3: four classifications) ----
    Only the rule matching [data-active] applies color; spans with no value
-   for the active category fall back to the inherited (neutral) text color. */
+   for the active category fall back to the inherited (neutral) text color.
+   统一只染虚线下划线（border-bottom-color），正文文字保持阅读色。 */
 
 /* ① 词性 (POS) */
-[data-active="pos"] ruby.ann[data-pos="noun"]   { color: #2563eb; }
-[data-active="pos"] ruby.ann[data-pos="verb"]   { color: #dc2626; }
-[data-active="pos"] ruby.ann[data-pos="adj"]    { color: #059669; }
-[data-active="pos"] ruby.ann[data-pos="adv"]    { color: #7c3aed; }
-[data-active="pos"] ruby.ann[data-pos="phrase"] { color: #d97706; }
+[data-active="pos"] ruby.ann[data-pos="noun"]   { border-bottom-color: var(--ann-blue); }
+[data-active="pos"] ruby.ann[data-pos="verb"]   { border-bottom-color: var(--ann-red); }
+[data-active="pos"] ruby.ann[data-pos="adj"]    { border-bottom-color: var(--ann-green); }
+[data-active="pos"] ruby.ann[data-pos="adv"]    { border-bottom-color: var(--ann-amber); }
+[data-active="pos"] ruby.ann[data-pos="phrase"] { border-bottom-color: var(--ann-gray); }
 
 /* ② 是否点击查看 (clicked) */
-[data-active="clicked"] ruby.ann[data-clicked="no"]  { color: #2563eb; }
-[data-active="clicked"] ruby.ann[data-clicked="yes"] { color: #9ca3af; }
+[data-active="clicked"] ruby.ann[data-clicked="no"]  { border-bottom-color: var(--ann-blue); }
+[data-active="clicked"] ruby.ann[data-clicked="yes"] { border-bottom-color: var(--ann-gray); }
 
 /* ③ 高考四六级 (gaokao / CET) */
-[data-active="gaokao"] ruby.ann[data-level="cet4"] { color: #059669; }
-[data-active="gaokao"] ruby.ann[data-level="cet6"] { color: #7c3aed; }
-[data-active="gaokao"] ruby.ann[data-level="gk"]   { color: #dc2626; }
+[data-active="gaokao"] ruby.ann[data-level="cet4"] { border-bottom-color: var(--ann-green); }
+[data-active="gaokao"] ruby.ann[data-level="cet6"] { border-bottom-color: var(--ann-blue); }
+[data-active="gaokao"] ruby.ann[data-level="gk"]   { border-bottom-color: var(--ann-amber); }
 
 /* ④ 词频 (frequency) */
-[data-active="freq"] ruby.ann[data-freq="high"] { color: #9ca3af; }
-[data-active="freq"] ruby.ann[data-freq="mid"]  { color: #2563eb; }
-[data-active="freq"] ruby.ann[data-freq="low"]  { color: #dc2626; }
+[data-active="freq"] ruby.ann[data-freq="high"] { border-bottom-color: var(--ann-gray); }
+[data-active="freq"] ruby.ann[data-freq="mid"]  { border-bottom-color: var(--ann-blue); }
+[data-active="freq"] ruby.ann[data-freq="low"]  { border-bottom-color: var(--ann-red); }
 
-/* ---- tap-to-lookup popup (T2.4, FR-D1/D2) ---- */
-.eread-popup {
-    position: fixed;
-    z-index: 100;
-    min-width: 120px;
-    max-width: 240px;
-    background: #fff;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    box-shadow: 0 4px 16px rgba(0,0,0,.15);
-    padding: .5em .7em;
-    font-family: system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
-}
-.eread-popup .ep-word { font-weight: 600; font-size: 15px; color: #111; }
-.eread-popup .ep-pos { font-size: 12px; color: #888; margin-top: .15em; }
-.eread-popup .ep-trans { font-size: 13px; color: #333; margin-top: .3em; }
-.eread-popup .ep-search {
-    font-size: 12px;
-    color: #2563eb;
-    margin-top: .4em;
-    padding-top: .4em;
-    border-top: 1px solid #f0f0f0;
-    cursor: pointer;
-}
+/* 查词弹窗 .eread-popup 定义在 ui.css（弹窗渲染于主文档，不在 iframe 内）。 */

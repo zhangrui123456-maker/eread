@@ -9,7 +9,9 @@
 
 import { toAnnotatedRuns, renderRuns } from './engine.js'
 import { bridgeCall } from '../bridge/messages.js'
-import { loadSettings, searchUrl } from '../settings.js'
+import { loadSettings } from '../settings.js'
+import { loadDict, classify } from '../dict/dict.js'
+import { openWordDetail, resolveWord, escapeHtml } from '../dict/detail.js'
 
 function hasBridge() {
     const b = window.ereadBridge
@@ -47,24 +49,33 @@ function fixScrolledImages(doc) {
 /** 翻译缓存：段前「译」标注的 segment 结果，按书 id + 段落文本缓存，
  *  重新打开/翻页时恢复标注，不重复 AI 翻译（需求1）。 */
 const TRANSLATION_KEY = 'eread-translation'
+
+/** 段译缓存：值从 segments[] 改为 {segments, grammar}（语法赏析随「译」一起缓存）。 */
 function getCachedSegments(bookId, paraText) {
     try {
         return JSON.parse(localStorage.getItem(TRANSLATION_KEY) || '{}')[bookId]?.[paraText] || null
     } catch { return null }
 }
-function cacheSegments(bookId, paraText, segments) {
+function cacheSegments(bookId, paraText, payload) {
     try {
         const map = JSON.parse(localStorage.getItem(TRANSLATION_KEY) || '{}')
         map[bookId] = map[bookId] || {}
-        map[bookId][paraText] = segments
+        map[bookId][paraText] = payload
         localStorage.setItem(TRANSLATION_KEY, JSON.stringify(map))
     } catch { /* ignore */ }
+}
+
+/** 段落语法赏析（随「译」缓存，未译过则 null）。 */
+function getCachedGrammar(bookId, paraText) {
+    return getCachedSegments(bookId, paraText)?.grammar || null
 }
 
 /** Insert a click-to-annotate trigger before each paragraph in `doc`. */
 export function setupAnnotations(doc, opts = {}) {
     const onStatus = opts.onStatus ?? (() => {})
     const bookId = opts.bookId ?? ''
+    // 激活词频分类颜色：虚线颜色按本地词频上色（FR-A3 ④，见 annotations.css）
+    doc.documentElement.setAttribute('data-active', 'freq')
     if (!hasBridge()) { onStatus('no bridge — annotation skipped (browser mode)'); return }
 
     if (loadSettings().flow === 'scrolled') {
@@ -99,18 +110,34 @@ async function annotateParagraph(doc, p, btn, onStatus, bookId) {
     btn.textContent = '…'
 
     // ① 先查翻译缓存，命中则直接用（不调 AI）
-    let segments = getCachedSegments(bookId, text)
-    if (!segments) {
-        // ② 未命中：调 AI 划线 + 缓存
+    let cached = getCachedSegments(bookId, text)
+    let segments, grammar
+    if (cached && Array.isArray(cached.segments)) {
+        segments = cached.segments
+        grammar = cached.grammar ?? ''
+    } else {
+        // ② 未命中：调 AI 划线 + 语法赏析 + 缓存
         let res
         try { res = await bridgeCall('segment', { text, ...apiParams() }) }
         catch (e) { btn.textContent = '译'; onStatus('segment bridge error: ' + e.message); return }
         if (!res.ok) { btn.textContent = '译'; onStatus('segment failed: ' + (res.error ?? '?')); return }
-        try { segments = (JSON.parse(res.content).segments ?? []).filter(s => s.text) }
-        catch { btn.textContent = '译'; onStatus('bad segment JSON'); return }
-        if (segments.length) cacheSegments(bookId, text, segments)
+        let parsed
+        try { parsed = JSON.parse(res.content) } catch { btn.textContent = '译'; onStatus('bad segment JSON'); return }
+        segments = (parsed.segments ?? []).filter(s => s.text)
+        grammar = parsed.grammar ?? ''
+        if (segments.length) cacheSegments(bookId, text, { segments, grammar })
     }
     if (!segments.length) { btn.textContent = '译'; onStatus('no segments'); return }
+
+    // 用本地词典覆盖词频/等级（模型猜的词频不可靠，本地词库为准；未命中保留模型值）
+    await loadDict()
+    for (const seg of segments) {
+        const c = classify(seg.text)
+        if (c.level !== 'none') {
+            seg.freq = c.freq
+            seg.difficulty = c.difficulty
+        }
+    }
 
     const { runs } = toAnnotatedRuns(text, segments)
     renderRuns(doc, p, runs)
@@ -123,11 +150,14 @@ async function annotateParagraph(doc, p, btn, onStatus, bookId) {
 
 // 模块级单例弹窗：全局只存在一个，跨 section 也只一个。
 let activePopup = null
+// 单调递增序号：每次点词 +1，异步翻译返回时若序号已变则丢弃，避免并发弹窗泄漏。
+let lookupSeq = 0
 function dismissPopup() { activePopup?.remove(); activePopup = null }
 
 /** Tap a word → select it → popup with translation/pos/phonetic. */
 export function setupWordLookup(doc, opts = {}) {
     const onStatus = opts.onStatus ?? (() => {})
+    const bookId = opts.bookId ?? ''
     if (!hasBridge()) return
 
     doc.addEventListener('click', async e => {
@@ -139,15 +169,14 @@ export function setupWordLookup(doc, opts = {}) {
         if (!hit) { window.toggleBars?.(true); return } // 空白：显示顶栏/底栏
         selectRange(hit.range)
 
-        let res
-        try { res = await bridgeCall('translate', { text: hit.text, kind: 'word', ...apiParams() }) }
-        catch (err) { onStatus('lookup bridge error: ' + err.message); return }
-        if (!res.ok) { onStatus('lookup failed: ' + (res.error ?? '?')); return }
+        const mySeq = ++lookupSeq // 本次点击的序号，用于丢弃过期响应
+        const data = await resolveWord(hit.text)
+        if (mySeq !== lookupSeq) return // 期间又有新点击，丢弃这个过期结果，防止弹窗卡住
+        if (!data) { onStatus('查词失败（本地与联网均未命中）'); return }
 
-        let data
-        try { data = JSON.parse(res.content) } catch { onStatus('bad translate JSON'); return }
-
-        activePopup = showPopup(doc, hit.range, hit.text, data)
+        const p = paragraphAt(hit.range)
+        const ctx = { bookId, paraText: p?.textContent ?? '' }
+        activePopup = showPopup(doc, hit.range, hit.text, data, ctx)
     })
 }
 
@@ -184,6 +213,13 @@ function expandToWord(range) {
     return r
 }
 
+/** 从 range 向上找所在的段落 <p>（取段落文本，供「段落赏析」缓存查询）。 */
+function paragraphAt(range) {
+    const node = range.startContainer
+    const el = node?.nodeType === 1 ? node : node?.parentElement
+    return el?.closest?.('p') ?? null
+}
+
 function selectRange(range) {
     const win = range.startContainer.ownerDocument.defaultView
     const sel = win.getSelection()
@@ -191,12 +227,7 @@ function selectRange(range) {
     sel.addRange(range)
 }
 
-function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, c =>
-        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
-}
-
-function showPopup(doc, range, word, data) {
+function showPopup(doc, range, word, data, ctx = {}) {
     // 弹窗放主文档，避开 iframe 分页多列坐标越界问题。
     const div = window.document.createElement('div')
     div.className = 'eread-popup'
@@ -204,7 +235,7 @@ function showPopup(doc, range, word, data) {
         `<div class="ep-word">${escapeHtml(word)}</div>` +
         (data.pos ? `<div class="ep-pos">${escapeHtml(data.pos)}${data.phonetic ? ' · ' + escapeHtml(data.phonetic) : ''}</div>` : '') +
         `<div class="ep-trans">${escapeHtml(data.translation ?? '')}</div>` +
-        `<div class="ep-search">🔍 在网页中搜索</div>`
+        `<div class="ep-detail"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>详情</div>`
 
     window.document.body.appendChild(div)
 
@@ -213,13 +244,15 @@ function showPopup(doc, range, word, data) {
         positionAroundWord(div, range, doc)
     }
 
-    // "search on web" (FR-D3)
-    div.querySelector('.ep-search').addEventListener('click', () => {
-        bridgeCall('openExternal', { url: searchUrl(word) })
+    // 内置详情页（FR-D3：不再跳系统浏览器）
+    div.querySelector('.ep-detail').addEventListener('click', () => {
+        dismissPopup()
+        const grammar = ctx?.paraText ? getCachedGrammar(ctx.bookId ?? '', ctx.paraText) : null
+        openWordDetail(word, data, { grammar })
     })
 
-    // 5s 自动消失（若仍是最新弹窗）
-    setTimeout(() => { if (activePopup === div) dismissPopup() }, 5000)
+    // 5s 自动消失：只移除自己的 div（不误删更新的弹窗），同时兜底清理任何泄漏的旧弹窗
+    setTimeout(() => { if (activePopup === div) activePopup = null; div.remove() }, 5000)
 
     return div
 }

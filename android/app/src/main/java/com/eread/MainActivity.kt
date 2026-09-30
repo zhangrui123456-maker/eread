@@ -107,6 +107,8 @@ class MainActivity : Activity() {
         when (method) {
             "segment" -> runModel(method, id, paramsJson)
             "translate" -> runModel(method, id, paramsJson)
+            "generateSentence" -> runModel(method, id, paramsJson)
+            "evaluateTranslation" -> runModel(method, id, paramsJson)
             "openExternal" -> openExternal(id, paramsJson)
             "openFilePicker" -> openFilePicker(id)
             "openImagePicker" -> openImagePicker(id)
@@ -121,11 +123,6 @@ class MainActivity : Activity() {
         Thread {
             try {
                 val params = JSONObject(paramsJson)
-                val text = params.optString("text", "")
-                if (text.isEmpty()) {
-                    resolve(id, """{"ok":false,"error":"parse","message":"empty text"}""")
-                    return@Thread
-                }
                 // BYOK 配置：base_url/model 从 Web 传（或 native 默认），key 从 Keystore 解密
                 val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
                 val baseUrl = params.optString("apiBaseUrl", "").ifEmpty { prefs.getString("base_url", "") ?: BASE_URL }
@@ -135,14 +132,32 @@ class MainActivity : Activity() {
                     resolve(id, """{"ok":false,"error":"no_key","message":"请先在设置中配置 API Key"}""")
                     return@Thread
                 }
-                val system = if (method == "segment") SEGMENT_SYSTEM else TRANSLATE_SYSTEM
-                val content = callDeepSeek(baseUrl, model, apiKey, system, text)
+                val (system, user) = buildPrompt(method, params)
+                if (user.isEmpty()) {
+                    resolve(id, """{"ok":false,"error":"parse","message":"empty input"}""")
+                    return@Thread
+                }
+                // 生成句子随机性由 Web 传 temperature（设置里可调，默认 0.9），其余任务确定性输出
+                val temperature = if (method == "generateSentence") params.optDouble("temperature", 0.9) else 0.0
+                val content = callDeepSeek(baseUrl, model, apiKey, system, user, temperature)
                 resolve(id, """{"ok":true,"content":${JSONObject.quote(content)}}""")
             } catch (e: Exception) {
                 Log.w(TAG, "model call $method failed", e)
                 resolve(id, """{"ok":false,"error":"network","message":${JSONObject.quote(e.message ?: "error")}}""")
             }
         }.start()
+    }
+
+    /** method → (systemPrompt, userContent)。segment/translate 用 text 单字段；
+     *  翻译练习的两个方法从 params 组装多字段输入。 */
+    private fun buildPrompt(method: String, params: JSONObject): Pair<String, String> {
+        return when (method) {
+            "segment" -> SEGMENT_SYSTEM to params.optString("text", "")
+            "translate" -> TRANSLATE_SYSTEM to params.optString("text", "")
+            "generateSentence" -> GEN_SENTENCE_SYSTEM to genSentenceUser(params)
+            "evaluateTranslation" -> EVAL_SYSTEM to evalUser(params)
+            else -> "" to ""
+        }
     }
 
     /** Open a URL in the system browser (word-lookup "search on web", FR-D3). */
@@ -319,10 +334,10 @@ class MainActivity : Activity() {
 
     /** Call the BYOK model. base_url/model/key are DEV constants for now —
      *  FR-M2 will move them to encrypted storage (Keystore) + a settings UI. */
-    private fun callDeepSeek(baseUrl: String, model: String, apiKey: String, system: String, user: String): String {
+    private fun callDeepSeek(baseUrl: String, model: String, apiKey: String, system: String, user: String, temperature: Double = 0.0): String {
         val body = JSONObject()
             .put("model", model)
-            .put("temperature", 0)
+            .put("temperature", temperature)
             .put("response_format", JSONObject().put("type", "json_object"))
             .put("messages", org.json.JSONArray()
                 .put(JSONObject().put("role", "system").put("content", system))
@@ -377,17 +392,74 @@ class MainActivity : Activity() {
             "{\"segments\": [{\"text\": \"...\", \"type\": \"word\"|\"phrase\",\n" +
             "  \"pos\": \"noun\"|\"verb\"|\"adj\"|\"adv\"|\"phrase\"|\"name\",\n" +
             "  \"difficulty\": \"cet4\"|\"cet6\"|\"gk\"|\"none\", \"freq\": \"high\"|\"mid\"|\"low\"|\"none\",\n" +
-            "  \"gloss\": \"中文释义\"}]}\n" +
+            "  \"gloss\": \"中文释义\"}],\n" +
+            " \"grammar\": \"用中文写的本段语法/句式赏析（2-4 句，面向学习者，点出关键语法点、从句、时态、固定搭配）\"}\n" +
             "\"text\" MUST be the exact substring as it appears in the paragraph — copy it verbatim,\n" +
             "including any spaces within a phrase. Do NOT include character offsets; the client\n" +
-            "locates each \"text\" in the paragraph itself. Return {\"segments\": []} if nothing is\n" +
-            "worth segmenting."
+            "locates each \"text\" in the paragraph itself. Return {\"segments\": [], \"grammar\": \"\"}\n" +
+            "if nothing is worth segmenting."
         )
 
         private val TRANSLATE_SYSTEM = (
-            "You translate an English word or phrase to Chinese. Return ONLY a JSON object\n" +
+            "You are an English-Chinese dictionary for a learner. Return ONLY a JSON object\n" +
             "(no prose, no code fence): {\"translation\": \"中文释义\",\n" +
-            "\"pos\": \"noun|verb|adj|adv|phrase|name\", \"phonetic\": \"音标(未知则空字符串)\"}."
+            "\"pos\": \"noun|verb|adj|adv|phrase|name\", \"phonetic\": \"音标(未知则空字符串)\",\n" +
+            "\"phrases\": [{\"phrase\": \"常用词组/搭配\", \"translation\": \"中文释义\"}]}.\n" +
+            "phrases: 3-5 个该词最常见的词组或固定搭配（动词短语、介词搭配、惯用语），没有则返回 []."
         )
+
+        // 翻译练习：生成一句用于翻译练习的长难句（方向/难度/句长/题材由 user 消息给出）
+        private val GEN_SENTENCE_SYSTEM = (
+            "You are a translation-exercise generator for a language-learning app.\n" +
+            "Generate ONE challenging long sentence for the user to translate, based on the\n" +
+            "direction, difficulty, length and topic in the user message.\n" +
+            "- direction en2zh: output an English sentence with layered clauses and vocabulary\n" +
+            "  matching the difficulty level.\n" +
+            "- direction zh2en: output a Chinese sentence with layered description/narration.\n" +
+            "Match the requested difficulty (zhongkao/gaokao/cet4/cet6/ielts/toefl) in word choice,\n" +
+            "and the requested length (word/character count) approximately.\n" +
+            "Vary the sentence opening and clause order every time — do NOT keep starting with the\n" +
+            "same connector (e.g. Although, However, When). Use diverse starters and structures.\n" +
+            "Return ONLY a JSON object (no prose, no code fence): {\"sentence\": \"...\"}"
+        )
+
+        // 翻译练习：评分 + 逐条纠错 + 占位词/问题词讲解 + 标准翻译
+        private val EVAL_SYSTEM = (
+            "You are a translation grader for a language-learning app.\n" +
+            "Grade the user's translation of the source sentence, then return corrections,\n" +
+            "vocabulary explanations, and a standard translation.\n" +
+            "Return ONLY a JSON object of this exact shape (no prose, no code fence):\n" +
+            "{\"score\": 0-100 的整数,\n" +
+            " \"overall\": \"一句话总评（中文）\",\n" +
+            " \"corrections\": [{\"issue\": \"问题描述（中文）\", \"fix\": \"修改建议（中文）\", \"word\": \"相关英文词（无则空字符串）\"}],\n" +
+            " \"vocab\": [{\"word\": \"英文词\", \"gloss\": \"中文释义\", \"explain\": \"讲解（中文）\"}],\n" +
+            " \"standard\": \"标准翻译\"}\n" +
+            "corrections 针对用户译文的错误或生硬处；vocab 针对用户占位（未译出的词）或错误用词，\n" +
+            "给出英文词 + 中文释义 + 讲解；standard 是符合难度要求的通顺标准翻译。\n" +
+            "若用户译文里保留了原文英文词占位（英译中）或中文占位（中译英），把这些占位对应的\n" +
+            "词/表达写进 vocab 并讲解。"
+        )
+
+        /** 组装「生成句子」的 user 消息（中文指令，模型据此生成）。 */
+        private fun genSentenceUser(params: JSONObject): String {
+            val direction = params.optString("direction", "en2zh") // en2zh|zh2en
+            val difficulty = params.optString("difficulty", "gaokao")
+            val length = params.optInt("length", 20)
+            val topic = params.optString("topic", "").trim()
+            val dirDesc = if (direction == "zh2en") "中文长难句（描写/叙述为主，含一定层次）" else "英文长难句（含一定层次词汇）"
+            val unit = if (direction == "zh2en") "字" else "词"
+            val topicDesc = if (topic.isEmpty()) "不限题材" else "题材：$topic"
+            return "方向：$dirDesc\n难度：$difficulty\n句长：约 $length $unit\n$topicDesc\n请生成一句用于翻译练习的句子。"
+        }
+
+        /** 组装「测评」的 user 消息（原文 + 用户译文）。 */
+        private fun evalUser(params: JSONObject): String {
+            val direction = params.optString("direction", "en2zh")
+            val difficulty = params.optString("difficulty", "gaokao")
+            val source = params.optString("source", "")
+            val user = params.optString("user", "")
+            val dirDesc = if (direction == "zh2en") "中译英" else "英译中"
+            return "方向：$dirDesc\n难度：$difficulty\n\n原文：\n$source\n\n用户译文：\n$user"
+        }
     }
 }

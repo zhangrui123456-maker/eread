@@ -53,6 +53,10 @@ export const BridgeMethods = {
     segment: 'segment',          // {text, context?} -> {ok, segments: SEGMENT_SCHEMA[]}
     /** Translate a word/phrase or a whole paragraph (FR-D2 / FR-P1). */
     translate: 'translate',       // {text, context?, kind:'word'|'para'} -> {ok, translation, pos?, phonetic?}
+    /** 翻译练习：AI 生成长难句（英译中给英文、中译英给中文）。 */
+    generateSentence: 'generateSentence',   // {direction, difficulty, length, topic} -> {ok, content: JSON{sentence}}
+    /** 翻译练习：AI 评分纠错 + 讲解 + 标准翻译。 */
+    evaluateTranslation: 'evaluateTranslation', // {direction, difficulty, source, user} -> {ok, content: JSON{score,corrections,vocab,standard}}
     /** BYOK connection check (FR-M1/M3). */
     pingModel: 'pingModel',      // {providerId} -> {ok}
     /** Annotation cache read/write by book+locator (FR-A5, avoid re-call). */
